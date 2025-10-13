@@ -1,5 +1,14 @@
 # Welcome to your Expo app 👋
 
+# Todas as libs que estão a ser usadas no momento : 
+- npx expo install react-native-maps@1.20.1
+- npm install @supabase/supabase-js
+- npm install react-hook-form
+- npm install zod @hookform/resolvers
+- npm install nativewind
+- npm expo install expo-location
+- npm expo install expo-image-picker
+
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
 ## Get started
