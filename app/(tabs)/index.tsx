@@ -1,98 +1,60 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useState } from "react";
+import { View, Text, TextInput, TouchableOpacity, Modal, StyleSheet, Image } from "react-native";
+import { styles } from "../(home)/style";
+import { router } from "expo-router";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+export default function Index() {
+  const [showPopup, setShowPopup] = useState(false);
 
-export default function HomeScreen() {
+  function NextPage() {
+    router.navigate('/(cadastro)/loginn');
+  }
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <View style={styles.container}>
+      <Text style={styles.title}>Insira o teu número</Text>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      <TouchableOpacity onPress={() => setShowPopup(true)} style={styles.phoneInput}>
+        <Image source={{ uri: "https://flagcdn.com/w40/ao.png" }} style={styles.flag} />
+        <Text style={styles.phoneText}>+244</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.orText}>Ou</Text>
+
+      <TouchableOpacity style={styles.googleBtn}>
+        <Image
+          source={{ uri: "https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" }}
+          style={styles.icon}
+        />
+        <Text style={styles.btnText} onPress={() => setShowPopup(true)} >Entrar com o Google</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.emailBtn} onPress={NextPage}>
+        <Image
+          source={{ uri: "https://upload.wikimedia.org/wikipedia/commons/4/4e/Mail_%28iOS%29.svg" }}
+          style={styles.icon}
+        />
+        <Text style={styles.btnText}>Entrar com o E-mail</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.footer}>
+        Ao registar-te, estás a aceitar os nossos{" "}
+        <Text style={styles.link}>Termos & Condições</Text>, a reconhecer a nossa{" "}
+        <Text style={styles.link}>Política de Privacidade</Text> e a confirmar que tens mais de 18 anos.
+      </Text>
+
+      <Modal transparent visible={showPopup} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalText}>
+              O cadastramento com número de telemóvel  e com google estará disponível em breve.
+            </Text>
+            <TouchableOpacity style={styles.closeBtn} onPress={() => setShowPopup(false)}>
+              <Text style={styles.closeBtnText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
-});
