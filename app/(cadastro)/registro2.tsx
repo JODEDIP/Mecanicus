@@ -1,212 +1,386 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Image, ScrollView, Alert } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  useColorScheme,
+  ActivityIndicator,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useColorScheme } from "nativewind";
+import { useForm, Controller } from "react-hook-form";
+import { z } from "zod";
+import { supabase } from "@/supabaseClient";
 import { router } from "expo-router";
-import { supabase } from "@/supabaseClient" // ajuste o caminho conforme seu projeto
-import type { Country } from "react-native-country-picker-modal";
+
+// 🎨 Paleta de cores consistente
+const ACCENT_COLOR = "#2ECC71";
+const LIGHT_BG = "white";
+const DARK_BG = "black";
+const LIGHT_INPUT_BG = "#F0F0F0";
+const DARK_INPUT_BG = "#1C1C1E";
+const LIGHT_TEXT = "black";
+const DARK_TEXT = "white";
+const LIGHT_PLACEHOLDER = "#A0A0A0";
+const DARK_PLACEHOLDER = "#8E8E93";
+const LIGHT_GRAY_TEXT = "#4A4A4A";
+const DARK_GRAY_TEXT = "#D1D5DB";
+
+// 🔹 Schemas de validação
+const personalSchema = z.object({
+  firstName: z.string().min(2, "Nome obrigatório"),
+  lastName: z.string().min(2, "Sobrenome obrigatório"),
+  phoneNumber: z
+    .string()
+    .min(7, "Telefone inválido")
+    .regex(/^\d+$/, "Apenas números"),
+});
+
+const clientSchema = z.object({
+  numeroBI: z.string().min(5, "Número do BI obrigatório"),
+});
+
+const vehicleSchema = z.object({
+  marca: z.string().min(2, "Marca obrigatória"),
+  modelo: z.string().min(2, "Modelo obrigatória"),
+  placa: z.string().min(2, "Placa obrigatória"),
+  cor: z.string().min(2, "Cor obrigatória"),
+});
+
+type FormData = z.infer<typeof personalSchema> &
+  z.infer<typeof clientSchema> &
+  z.infer<typeof vehicleSchema>;
 
 export default function RegisterScreen() {
-  const { colorScheme } = useColorScheme();
-
-  // Etapas do cadastro
   const [step, setStep] = useState<"pessoal" | "cliente" | "veiculo">("pessoal");
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const [loading, setLoading] = useState(false);
 
-  // --- Dados pessoais (usuário) ---
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [countryCode, setCountryCode] = useState<Country["cca2"]>("AO");
-  const [callingCode, setCallingCode] = useState("244");
+  const { control, getValues, reset } = useForm<FormData>({
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+      phoneNumber: "",
+      numeroBI: "",
+      marca: "",
+      modelo: "",
+      placa: "",
+      cor: "",
+    },
+  });
 
-  // --- Dados cliente ---
-  const [numeroBI, setNumeroBI] = useState("");
+  const getDynamicColor = (light: string, dark: string) => (isDark ? dark : light);
 
-  // --- Dados do veículo ---
-  const [marca, setMarca] = useState("");
-  const [modelo, setModelo] = useState("");
-  const [placa, setPlaca] = useState("");
-  const [cor, setCor] = useState("");
-
-  // Função que avança entre as etapas e salva no Supabase
+  // 🔹 Função principal
   const handleNext = async () => {
-    if (step === "pessoal") {
-      if (!firstName || !lastName || !phoneNumber) {
-        Alert.alert("Erro", "Preencha todos os campos pessoais.");
-        return;
-      }
-      setStep("cliente");
-      return;
-    }
-
-    if (step === "cliente") {
-      if (!numeroBI) {
-        Alert.alert("Erro", "Digite o número do BI.");
-        return;
-      }
-      setStep("veiculo");
-      return;
-    }
-
-    // Etapa final: inserir no Supabase
-    if (!marca || !modelo || !placa || !cor) {
-      Alert.alert("Erro", "Preencha todos os dados do veículo.");
-      return;
-    }
+    const values = getValues();
 
     try {
+      if (step === "pessoal") {
+        personalSchema.parse(values);
+        return setStep("cliente");
+      }
+      if (step === "cliente") {
+        clientSchema.parse(values);
+        return setStep("veiculo");
+      }
+
+      vehicleSchema.parse(values);
+      setLoading(true);
+
+      // Supabase user
       const {
         data: { user },
         error: userError,
       } = await supabase.auth.getUser();
 
       if (userError || !user) {
-        Alert.alert("Erro", "Usuário não autenticado.");
-        return;
+        setLoading(false);
+        return Alert.alert("Erro", "Usuário não autenticado.");
       }
 
-      // --- Insere/atualiza usuário ---
-      const { error: userInsertError } = await supabase.from("usuario").upsert({
+      const { firstName, lastName, phoneNumber, numeroBI, marca, modelo, placa, cor } =
+        values;
+
+      await supabase.from("usuario").upsert({
         id: user.id,
         name: firstName,
         lname: lastName,
-        Telefone: `+${callingCode}${phoneNumber}`,
+        Telefone: phoneNumber,
       });
-      if (userInsertError) throw userInsertError;
 
-      // --- Insere cliente ---
-      const { error: clienteError } = await supabase.from("cliente").insert({
+      await supabase.from("cliente").insert({
         idusuario: user.id,
         numerobi: numeroBI,
       });
-      if (clienteError) throw clienteError;
 
-      // --- Insere veículo ---
-      const { error: veiculoError } = await supabase.from("veiculo").insert({
+      await supabase.from("veiculo").insert({
         iddono: user.id,
-        placacarro: placa,
-        cor,
         marca,
         modelo,
+        placacarro: placa,
+        cor,
       });
-      if (veiculoError) throw veiculoError;
 
-      Alert.alert("Sucesso", "Cadastro realizado com sucesso!");
+      Alert.alert("Sucesso", "Cadastro concluído!");
+      reset();
       router.push("/(home)/home");
     } catch (err: any) {
-      console.error("Erro inesperado:", err);
-      Alert.alert("Erro", err.message || "Falha ao salvar dados.");
+      Alert.alert("Erro", err.errors?.[0]?.message || err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // --- Renderização dinâmica por etapa ---
-  const renderFormStep = () => {
-    if (step === "pessoal") {
+  const renderStep = () => {
+    const inputStyle = [
+      styles.textInput,
+      {
+        backgroundColor: getDynamicColor(LIGHT_INPUT_BG, DARK_INPUT_BG),
+        color: getDynamicColor(LIGHT_TEXT, DARK_TEXT),
+      },
+    ];
+
+    if (step === "pessoal")
       return (
         <>
-          <TextInput
-            placeholder="Nome"
-            value={firstName}
-            onChangeText={setFirstName}
-            className="w-full px-4 py-3 bg-[#F0F0F0] rounded-xl text-black dark:text-white mb-3"
+          <Controller
+            control={control}
+            name="firstName"
+            render={({ field }) => (
+              <TextInput
+                placeholder="Nome"
+                placeholderTextColor={getDynamicColor(LIGHT_PLACEHOLDER, DARK_PLACEHOLDER)}
+                value={field.value}
+                onChangeText={field.onChange}
+                style={inputStyle}
+              />
+            )}
           />
-          <TextInput
-            placeholder="Sobrenome"
-            value={lastName}
-            onChangeText={setLastName}
-            className="w-full px-4 py-3 bg-[#F0F0F0] rounded-xl text-black dark:text-white mb-3"
+          <Controller
+            control={control}
+            name="lastName"
+            render={({ field }) => (
+              <TextInput
+                placeholder="Sobrenome"
+                placeholderTextColor={getDynamicColor(LIGHT_PLACEHOLDER, DARK_PLACEHOLDER)}
+                value={field.value}
+                onChangeText={field.onChange}
+                style={inputStyle}
+              />
+            )}
           />
-          <TextInput
-            placeholder="Telefone"
-            keyboardType="phone-pad"
-            value={phoneNumber}
-            onChangeText={setPhoneNumber}
-            className="w-full px-4 py-3 bg-[#F0F0F0] rounded-xl text-black dark:text-white mb-3"
+          <Controller
+            control={control}
+            name="phoneNumber"
+            render={({ field }) => (
+              <TextInput
+                placeholder="Telefone"
+                placeholderTextColor={getDynamicColor(LIGHT_PLACEHOLDER, DARK_PLACEHOLDER)}
+                keyboardType="phone-pad"
+                value={field.value}
+                onChangeText={field.onChange}
+                style={inputStyle}
+              />
+            )}
           />
         </>
       );
-    }
 
-    if (step === "cliente") {
+    if (step === "cliente")
       return (
-        <TextInput
-          placeholder="Número do BI"
-          value={numeroBI}
-          onChangeText={setNumeroBI}
-          className="w-full px-4 py-3 bg-[#F0F0F0] rounded-xl text-black dark:text-white mb-3"
+        <Controller
+          control={control}
+          name="numeroBI"
+          render={({ field }) => (
+            <TextInput
+              placeholder="Número do BI"
+              placeholderTextColor={getDynamicColor(LIGHT_PLACEHOLDER, DARK_PLACEHOLDER)}
+              value={field.value}
+              onChangeText={field.onChange}
+              style={inputStyle}
+            />
+          )}
         />
       );
-    }
 
     return (
       <>
-        <TextInput
-          placeholder="Marca do veículo"
-          value={marca}
-          onChangeText={setMarca}
-          className="w-full px-4 py-3 bg-[#F0F0F0] rounded-xl text-black dark:text-white mb-3"
+        <Controller
+          control={control}
+          name="marca"
+          render={({ field }) => (
+            <TextInput
+              placeholder="Marca"
+              placeholderTextColor={getDynamicColor(LIGHT_PLACEHOLDER, DARK_PLACEHOLDER)}
+              value={field.value}
+              onChangeText={field.onChange}
+              style={inputStyle}
+            />
+          )}
         />
-        <TextInput
-          placeholder="Modelo"
-          value={modelo}
-          onChangeText={setModelo}
-          className="w-full px-4 py-3 bg-[#F0F0F0] rounded-xl text-black dark:text-white mb-3"
+        <Controller
+          control={control}
+          name="modelo"
+          render={({ field }) => (
+            <TextInput
+              placeholder="Modelo"
+              placeholderTextColor={getDynamicColor(LIGHT_PLACEHOLDER, DARK_PLACEHOLDER)}
+              value={field.value}
+              onChangeText={field.onChange}
+              style={inputStyle}
+            />
+          )}
         />
-        <TextInput
-          placeholder="Placa"
-          autoCapitalize="characters"
-          value={placa}
-          onChangeText={setPlaca}
-          className="w-full px-4 py-3 bg-[#F0F0F0] rounded-xl text-black dark:text-white mb-3"
+        <Controller
+          control={control}
+          name="placa"
+          render={({ field }) => (
+            <TextInput
+              placeholder="Placa"
+              placeholderTextColor={getDynamicColor(LIGHT_PLACEHOLDER, DARK_PLACEHOLDER)}
+              autoCapitalize="characters"
+              value={field.value}
+              onChangeText={field.onChange}
+              style={inputStyle}
+            />
+          )}
         />
-        <TextInput
-          placeholder="Cor"
-          value={cor}
-          onChangeText={setCor}
-          className="w-full px-4 py-3 bg-[#F0F0F0] rounded-xl text-black dark:text-white mb-3"
+        <Controller
+          control={control}
+          name="cor"
+          render={({ field }) => (
+            <TextInput
+              placeholder="Cor"
+              placeholderTextColor={getDynamicColor(LIGHT_PLACEHOLDER, DARK_PLACEHOLDER)}
+              value={field.value}
+              onChangeText={field.onChange}
+              style={inputStyle}
+            />
+          )}
         />
       </>
     );
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white dark:bg-black">
-      <ScrollView className="flex-1 p-4">
-        <View className="w-full max-w-md mx-auto mt-4">
-          {/* Indicador de progresso */}
-          <View className="mb-6">
-            <Text className="text-center text-base text-black dark:text-white mb-2">
-              {step === "pessoal" && "1 de 3: Dados Pessoais"}
-              {step === "cliente" && "2 de 3: Dados do Cliente"}
-              {step === "veiculo" && "3 de 3: Dados do Veículo"}
-            </Text>
-            <View className="w-full bg-gray-300 h-2 rounded-full">
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: getDynamicColor(LIGHT_BG, DARK_BG) }]}
+    >
+      <ScrollView contentContainerStyle={styles.scrollViewContent}>
+        {/* Cabeçalho e progresso */}
+        <View style={styles.headerContainer}>
+          <View style={styles.logoWrapper}>
+            <Text style={styles.logoText}>Mekanikus</Text>
+          </View>
+
+          <View style={styles.progressBarWrapper}>
+            <View style={styles.progressBarTextWrapper}>
+              <Text
+                style={[
+                  styles.progressBarText,
+                  { color: getDynamicColor(LIGHT_TEXT, DARK_TEXT) },
+                ]}
+              >
+                {step === "pessoal"
+                  ? "Dados Pessoais"
+                  : step === "cliente"
+                  ? "Informações do Cliente"
+                  : "Dados do Veículo"}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.progressBarBackground,
+                { backgroundColor: getDynamicColor(LIGHT_INPUT_BG, DARK_INPUT_BG) },
+              ]}
+            >
               <View
-                className={`h-2 rounded-full ${
-                  step === "pessoal"
-                    ? "w-1/3 bg-blue-500"
-                    : step === "cliente"
-                    ? "w-2/3 bg-blue-500"
-                    : "w-full bg-green-500"
-                }`}
+                style={[
+                  styles.progressBarFill,
+                  {
+                    width: step === "pessoal" ? "33%" : step === "cliente" ? "66%" : "100%",
+                  },
+                ]}
               />
             </View>
           </View>
 
-          {/* Formulário dinâmico */}
-          {renderFormStep()}
+          {/* Formulário */}
+          <View style={styles.formContainer}>
+            {renderStep()}
 
-          {/* Botão */}
-          <TouchableOpacity
-            onPress={handleNext}
-            className="mt-6 w-full bg-[#2ECC71] py-3 rounded-xl shadow items-center active:opacity-90"
-          >
-            <Text className="text-white font-bold text-base">
-              {step === "veiculo" ? "Concluir Cadastro" : "Próximo"}
-            </Text>
-          </TouchableOpacity>
+            <View style={styles.buttonWrapper}>
+              <TouchableOpacity
+                style={[styles.button, { opacity: loading ? 0.8 : 1 }]}
+                onPress={handleNext}
+                disabled={loading}
+                activeOpacity={0.9}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>
+                    {step === "veiculo" ? "Concluir Cadastro" : "Próximo"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+// 🎨 Estilos herdados e aplicados
+const styles = StyleSheet.create({
+  safeArea: { flex: 1 },
+  scrollViewContent: { flexGrow: 1, padding: 16 },
+  headerContainer: {
+    width: "100%",
+    maxWidth: 448,
+    alignSelf: "center",
+    marginTop: 32,
+  },
+  logoWrapper: { alignItems: "center", marginBottom: 32 },
+  logoText: { fontSize: 36, fontWeight: "700", color: ACCENT_COLOR },
+  progressBarWrapper: { marginBottom: 32 },
+  progressBarTextWrapper: { alignItems: "center", marginBottom: 8 },
+  progressBarText: { fontSize: 14, fontWeight: "500" },
+  progressBarBackground: { width: "100%", borderRadius: 9999, height: 8 },
+  progressBarFill: { backgroundColor: ACCENT_COLOR, height: 8, borderRadius: 9999 },
+  formContainer: { gap: 16 },
+  textInput: {
+    width: "100%",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    fontSize: 14,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  buttonWrapper: { paddingTop: 24 },
+  button: {
+    width: "100%",
+    backgroundColor: ACCENT_COLOR,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  buttonText: { color: "white", fontWeight: "700", fontSize: 16 },
+});

@@ -1,16 +1,14 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, Modal, StyleSheet, Image } from "react-native";
-import { styles } from "../(home)/style";
+import { styles } from "./(home)/styles";
 import { router } from "expo-router";
 
 export default function Index() {
   const [showPopup, setShowPopup] = useState(false);
-
   function NextPage() {
-    router.navigate('/(cadastro)/loginn');
+    router.navigate('/(cadastro)/login');
   }
-
-  return (
+    return (
     <View style={styles.container}>
       <Text style={styles.title}>Insira o teu número</Text>
 
