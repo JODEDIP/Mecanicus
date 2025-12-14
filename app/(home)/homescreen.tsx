@@ -1,351 +1,278 @@
-import React, { useEffect, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  FlatList,
-  TextInput,
-  Image,
-  Alert,
-  Modal,
-  ScrollView,
-} from "react-native";
-import MapView, { Marker } from "react-native-maps";
-import {
-  requestForegroundPermissionsAsync,
-  getCurrentPositionAsync,
-  watchPositionAsync,
-  LocationAccuracy,
-  LocationObject,
-} from "expo-location";
-import * as ImagePicker from "expo-image-picker";
-import { supabase } from "@/supabaseClient";
+import { decode } from '@mapbox/polyline';
+import * as Location from 'expo-location';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Dimensions, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native'; // Adicionado: Modal, Animated, TouchableOpacity
+import MapView, { Marker, Polyline } from 'react-native-maps';
 
+
+const { width, height } = Dimensions.get('window');
+const ASPECT_RATIO = width / height;
+const SIDEBAR_WIDTH = width * 0.8; 
+type LatLng = { latitude: number; longitude: number };
 export default function Home() {
-  const [location, setLocation] = useState<LocationObject | null>(null);
+  const [location, setLocation] = useState<LatLng | null>(null);
+  const [carStart, setCarStart] = useState<LatLng | null>(null);
+  const [routeCoords, setRouteCoords] = useState<LatLng[]>([]);
+  const [currentPos, setCurrentPos] = useState<LatLng | null>(null);
+  const [sidebarVisible, setSidebarVisible] = useState(false); 
   const mapRef = useRef<MapView>(null);
+  
+  const animationRef = useRef<number | null>(null);
+  const slideAnim = useRef(new Animated.Value(SIDEBAR_WIDTH)).current; 
 
-  // --- Serviços fixos (problemas pré-definidos) ---
-  const services = [
-    { id: "1", name: "Pneu furado", price: 5000 },
-    { id: "2", name: "Bateria descarregada", price: 7000 },
-    { id: "3", name: "Problema nos travões", price: 10000 },
-    { id: "4", name: "Pane elétrica", price: 8000 },
-  ];
-
-  // --- Veículos e Solicitação ---
-  const [veiculos, setVeiculos] = useState<any[]>([]);
-  const [veiculoSelecionado, setVeiculoSelecionado] = useState<string | null>(
-    null
-  );
-  const [problemaSelecionado, setProblemaSelecionado] = useState<any>(null);
-  const [descricao, setDescricao] = useState("");
-  const [imagem, setImagem] = useState<string | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
-
-  // Distância simulada (depois podemos puxar da API Maps)
-  const distanciaKm = 10;
-
-  // Buscar veículos do usuário autenticado
   useEffect(() => {
-    const fetchVeiculos = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from("veiculo")
-        .select("*")
-        .eq("iddono", user.id);
-
-      if (error) console.error(error);
-      else setVeiculos(data || []);
-    };
-    fetchVeiculos();
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('Permissão negada');
+        return;
+      }
+      let loc = await Location.getCurrentPositionAsync({});
+      const coords: LatLng = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+      setLocation(coords);
+      setCurrentPos(coords);
+    })();
   }, []);
 
-  // Permissão de localização
-  async function requestLocationPermission() {
-    const { status } = await requestForegroundPermissionsAsync();
-    if (status === "granted") {
-      const currentPosition = await getCurrentPositionAsync();
-      setLocation(currentPosition);
+  useEffect(() => {
+    if (routeCoords.length > 0 && !animationRef.current) {
+      let index = 0;
+      animationRef.current = setInterval(() => {
+        if (index < routeCoords.length) {
+          setCurrentPos(routeCoords[index]);
+          if (mapRef.current) {
+            mapRef.current.animateCamera(
+              {
+                center: routeCoords[index],
+                pitch: 2,
+                heading: 0,
+                altitude: 100,
+              },
+              { duration: 100 }  
+            );
+          }
+          index++;
+        } else {
+          if (animationRef.current) clearInterval(animationRef.current);
+          animationRef.current = null;
+        }
+      }, 100); 
     }
+    return () => {
+      if (animationRef.current) clearInterval(animationRef.current);
+    };
+  }, [routeCoords]);
+
+
+  const toggleSidebar = () => {
+    if (sidebarVisible) {
+
+      Animated.timing(slideAnim, {
+        toValue: SIDEBAR_WIDTH,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => {
+        setSidebarVisible(false);
+      });
+    } else {
+
+      setSidebarVisible(true);
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  const handleMapPress = (event: { nativeEvent: { coordinate: LatLng } }) => {
+    const pressedCoord = event.nativeEvent.coordinate;
+    setCarStart(pressedCoord);
+    setRouteCoords([]); 
+    setCurrentPos(pressedCoord);
+    if (location) {
+      calculateRoute(pressedCoord, location);
+    }
+  };
+
+  const calculateRoute = async (start: LatLng, end: LatLng) => {
+    console.log('Ponto de partida do carro:', start); 
+    console.log('Destino (sua localização):', end); 
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=polyline`;
+      console.log('URL da rota OSRM:', url);
+      const response = await fetch(url);
+      const data = await response.json();
+      console.log('Resposta OSRM (primeira rota):', data.routes?.[0]);
+      if (data.routes && data.routes[0]) {
+        const polylineStr = data.routes[0].geometry;
+        console.log('String polyline raw:', polylineStr); 
+        const rawDecoded = decode(polylineStr, 5); 
+        const coords: LatLng[] = rawDecoded.map(([lat, lng]: [number, number]) => ({
+          latitude: lat,
+          longitude: lng
+        })); 
+        console.log('Rota decodificada corrigida 3 pontos:', coords.slice(0, 3)); 
+        setRouteCoords(coords);
+      } else {
+        console.log('Nenhuma rota encontrada, verifique se pontos são próximos e em estrada');
+      }
+    } catch (error) {
+      console.log('Erro na rota:', error);
+    }
+  };
+
+  const handleAccountPress = () => {
+    console.log('Abrindo conta...');
+    toggleSidebar(); 
+  };
+
+  const handleSettingsPress = () => {
+    console.log('Abrindo configurações...');
+    toggleSidebar();
+  };
+
+  const handleProviderPress = () => {
+    console.log('Abrindo formulário para prestador de serviços...');
+    toggleSidebar();
+  };
+
+  if (!location) {
+    return (
+      <View style={styles.container}>
+        <Text>Carregando...</Text>
+      </View>
+    );
   }
 
-  useEffect(() => {
-    requestLocationPermission();
-  }, []);
-
-  useEffect(() => {
-    watchPositionAsync(
-      {
-        accuracy: LocationAccuracy.Highest,
-        timeInterval: 2000,
-        distanceInterval: 1,
-      },
-      (response) => {
-        setLocation(response);
-        mapRef.current?.animateCamera({
-          pitch: 40,
-          zoom: 17,
-          center: response.coords,
-        });
-      }
-    );
-  }, []);
-
-  // Seleção de imagem
-  const pickImage = async () => {
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.7,
-    });
-
-    if (!result.canceled) setImagem(result.assets[0].uri);
-  };
-
-  // Calcular custo
-  const calcularCusto = () => {
-    if (!problemaSelecionado) return "A definir (por conta do motorista)";
-    const custo = problemaSelecionado.price + distanciaKm * 200; // supondo 200 Kz/km
-    return `${custo} Kz (base + distância)`;
-  };
-
-  // Enviar solicitação
-  const handleSolicitarAjuda = async () => {
-    if (!veiculoSelecionado) {
-      Alert.alert("Erro", "Selecione um veículo.");
-      return;
-    }
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    const { error } = await supabase.from("solicitacoes").insert([
-      {
-        idusuario: user?.id,
-        idveiculo: veiculoSelecionado,
-        problema: problemaSelecionado ? problemaSelecionado.name : descricao,
-        descricao,
-        custo_estimado: problemaSelecionado
-          ? problemaSelecionado.price + distanciaKm * 200
-          : null,
-      },
-    ]);
-
-    if (error) {
-      console.error(error);
-      Alert.alert("Erro", "Não foi possível criar a solicitação.");
-    } else {
-      Alert.alert("Sucesso", "Solicitação enviada!");
-      setProblemaSelecionado(null);
-      setDescricao("");
-      setImagem(null);
-      setModalVisible(false);
-    }
-  };
-
   return (
-    <View style={{ flex: 1, backgroundColor: "#fff" }}>
-      {/* Mapa */}
-      {location && (
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          initialRegion={{
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          }}
-        >
+    <View style={styles.container}>
+
+      <TouchableOpacity 
+        style={styles.menuButton} 
+        onPress={toggleSidebar}
+      >
+        <Text style={styles.menuText}>☰</Text> 
+      </TouchableOpacity>
+
+      <MapView
+        ref={mapRef}
+        style={styles.map}
+        initialRegion={{
+          latitude: location.latitude,
+          longitude: location.longitude,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
+        }}
+        onPress={handleMapPress}
+        showsUserLocation
+        showsMyLocationButton
+      >
+        {currentPos && (
           <Marker
-            coordinate={{
-              latitude: location.coords.latitude,
-              longitude: location.coords.longitude,
-            }}
+            coordinate={currentPos}
+            title="Seu Carro"
+            image={{ uri: 'https://img.icons8.com/?size=100&id=fstRmz58OJqW&format=png&color=000000' }}
           />
-        </MapView>
-      )}
+        )}
+        {routeCoords.length > 0 && <Polyline coordinates={routeCoords} strokeColor="#007AFF" strokeWidth={3} />}
+      </MapView>
 
-      {/* Lista de Serviços Fixos */}
-      <View style={styles.bottomContainer}>
-        <FlatList
-          data={services}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.serviceCard}
-              onPress={() => {
-                setProblemaSelecionado(item);
-                setDescricao(item.name);
-                setModalVisible(true);
-              }}
-            >
-              <Text style={styles.serviceName}>{item.name}</Text>
-              <Text style={styles.servicePrice}>{item.price} Kz</Text>
-            </TouchableOpacity>
-          )}
-        />
 
-        {/* Abrir modal sem problema fixo */}
-        <TouchableOpacity
-          style={styles.confirmButton}
-          onPress={() => setModalVisible(true)}
-        >
-          <Text style={{ color: "#fff", fontSize: 16, fontWeight: "bold" }}>
-            Confirmar Pedido
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <Modal
+        transparent
+        visible={sidebarVisible}
+        animationType="none" 
+        onRequestClose={toggleSidebar}
+      >
+        <View style={styles.modalOverlay}>
 
-      {/* Modal Solicitação Completa */}
-      <Modal visible={modalVisible} animationType="slide">
-        <ScrollView style={{ flex: 1, padding: 20 }}>
-          <Text style={{ fontSize: 22, fontWeight: "bold", marginBottom: 10 }}>
-            Solicitação de Ajuda
-          </Text>
-
-          {/* Veículos */}
-          <Text style={{ fontWeight: "bold" }}>Selecione o veículo:</Text>
-          <FlatList
-            data={veiculos}
-            keyExtractor={(item) => item.id.toString()}
-            horizontal
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                onPress={() => setVeiculoSelecionado(item.id)}
-                style={{
-                  padding: 10,
-                  margin: 5,
-                  borderWidth: 1,
-                  borderColor:
-                    veiculoSelecionado === item.id ? "green" : "#ccc",
-                  borderRadius: 8,
-                }}
-              >
-                <Text>{item.modelo}</Text>
-                <Text style={{ fontSize: 12, color: "gray" }}>{item.placa}</Text>
+          <TouchableOpacity 
+            style={styles.overlayClick} 
+            activeOpacity={1} 
+            onPress={toggleSidebar} 
+          />
+          
+          {/* Sidebar animada */}
+          <Animated.View 
+            style={[
+              styles.sidebar, 
+              { 
+                transform: [{ translateX: slideAnim }], 
+              }
+            ]}
+          >
+            <View style={styles.sidebarContent}>
+              <TouchableOpacity style={styles.sidebarItem} onPress={handleAccountPress}>
+                <Text style={styles.sidebarText}>Conta</Text>
               </TouchableOpacity>
-            )}
-          />
-
-          {/* Descrição */}
-          <Text style={{ fontWeight: "bold", marginTop: 20 }}>Descrição:</Text>
-          <TextInput
-            value={descricao}
-            onChangeText={setDescricao}
-            placeholder="Descreva o problema..."
-            style={{
-              borderWidth: 1,
-              borderColor: "#ccc",
-              padding: 10,
-              marginBottom: 10,
-              borderRadius: 8,
-            }}
-          />
-
-          {/* Foto */}
-          <TouchableOpacity
-            onPress={pickImage}
-            style={{
-              backgroundColor: "#eee",
-              padding: 15,
-              borderRadius: 8,
-              alignItems: "center",
-              marginBottom: 10,
-            }}
-          >
-            <Text>{imagem ? "Trocar Foto" : "Tirar Foto"}</Text>
-          </TouchableOpacity>
-          {imagem && (
-            <Image
-              source={{ uri: imagem }}
-              style={{ width: "100%", height: 200, marginBottom: 10 }}
-            />
-          )}
-
-          {/* Custo */}
-          <Text style={{ fontWeight: "bold", marginVertical: 10 }}>
-            Custo estimado: {calcularCusto()}
-          </Text>
-
-          {/* Botões */}
-          <TouchableOpacity
-            onPress={handleSolicitarAjuda}
-            style={{
-              backgroundColor: "green",
-              padding: 15,
-              borderRadius: 8,
-              alignItems: "center",
-              marginBottom: 10,
-            }}
-          >
-            <Text style={{ color: "#fff", fontWeight: "bold" }}>
-              Enviar Solicitação
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setModalVisible(false)}
-            style={{
-              backgroundColor: "red",
-              padding: 15,
-              borderRadius: 8,
-              alignItems: "center",
-            }}
-          >
-            <Text style={{ color: "#fff", fontWeight: "bold" }}>Cancelar</Text>
-          </TouchableOpacity>
-        </ScrollView>
+              
+              <TouchableOpacity style={styles.sidebarItem} onPress={handleSettingsPress}>
+                <Text style={styles.sidebarText}>Configurações</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.sidebarItem} onPress={handleProviderPress}>
+                <Text style={styles.sidebarText}>Quero ser prestador de serviços</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </View>
       </Modal>
     </View>
   );
 }
 
+
 const styles = StyleSheet.create({
-  map: {
+  container: {
     flex: 1,
-    width: "100%",
-    height: "100%",
+    justifyContent: 'flex-end',
+    alignItems: 'center',
   },
-  bottomContainer: {
-    position: "absolute",
-    bottom: 0,
-    width: "100%",
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 16,
-    elevation: 5,
+  map: {
+    ...StyleSheet.absoluteFillObject,
   },
-  serviceCard: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    padding: 15,
-    borderRadius: 10,
-    backgroundColor: "#f5f5f5",
-    marginBottom: 10,
+
+  menuButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 1000,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 20,
+    padding: 10,
   },
-  serviceName: {
-    fontSize: 16,
-    fontWeight: "bold",
+  menuText: {
+    fontSize: 24,
+    color: '#000',
   },
-  servicePrice: {
-    fontSize: 16,
-    color: "green",
-    fontWeight: "bold",
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)', 
+    justifyContent: 'flex-end',
   },
-  confirmButton: {
-    marginTop: 10,
-    backgroundColor: "green",
-    padding: 15,
-    borderRadius: 10,
-    alignItems: "center",
+  overlayClick: {
+    flex: 1,
+  },
+  sidebar: {
+    width: SIDEBAR_WIDTH,
+    height: height,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+    borderLeftWidth: 1,
+    borderLeftColor: '#ddd',
+  },
+  sidebarContent: {
+    flex: 1,
+    paddingTop: 100, 
+    paddingHorizontal: 20,
+  },
+  sidebarItem: {
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  sidebarText: {
+    fontSize: 18,
+    color: '#333',
   },
 });
