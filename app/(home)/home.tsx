@@ -41,7 +41,7 @@ export default function ServiceScreen() {
     },
     {
       title: "Outros serviços",
-      description: "Fou qualquer outro problema, estamos aqui para ajudar.",
+      description: "Qualquer outro problema, estamos aqui para ajudar.",
       image:
         "https://lh3.googleusercontent.com/aida-public/AB6AXuBJ7k6V9FIukanxZ4ZuV3jkhhJYnjckXKsSsQy8_ThyOHhGHnIx7fpG6PdMhbux9YeMolfQ2bPqBMZOOp7byhBH5IGUfcpl4AgNhcfqgHDZ8F61vE-1ocXq2-pCwuI8qmRkefU4EtNI_uNbV4rs0l5QNeNjqNH79wxTiO0ReQw_g9Mwb5FDOzGb5ujNR6q4z2y5CBh3q-rQ3w3tEWaTIoy-6_W8JPtpAbK2GfZo2QZYkpMEc-WSAc8aAB8YJdX2gVTs34fgyEDWwA",
     },
@@ -152,13 +152,19 @@ export default function ServiceScreen() {
 
           <TouchableOpacity style={styles.navItem}>
             <MaterialIcons name="build" size={24} color="#888" />
-            <Text style={[styles.navText, { color: "#888" }]}>Serviços</Text>
+            <Text 
+            style={[styles.navText, { color: "#888" }]
+            }>Serviços</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.navItem}>
             <MaterialIcons name="person" size={24} color="#888" />
-            <Text style={[styles.navText, { color: "#888" }]}>Perfil</Text>
+            <Text 
+            onPress={() => router.push("/(home)/perfil")}
+            style={[styles.navText, { color: "#888" }]}>
+              Perfil</Text>
           </TouchableOpacity>
+
         </View>
       </View>
     </View>

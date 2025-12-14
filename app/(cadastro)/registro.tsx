@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import {View,Text,TextInput,TouchableOpacity,ScrollView,Alert,ActivityIndicator,StyleSheet, // Importar StyleSheet
-  useColorScheme, // Importar do React Native ou bibliotecas (como expo-constants/app-theme)
+import {View,Text,TextInput,TouchableOpacity,ScrollView,Alert,ActivityIndicator,StyleSheet, 
+  useColorScheme, 
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useForm, Controller } from "react-hook-form";
@@ -9,8 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { supabase } from "@/supabaseClient";
 import { router } from "expo-router";
 
-// --- Definições de Cores ---
-const ACCENT_COLOR = "#2ECC71"; // Verde principal
+const ACCENT_COLOR = "#2ECC71"; 
 const LIGHT_BG = "white";
 const DARK_BG = "black";
 const LIGHT_INPUT_BG = "#F0F0F0";
@@ -19,10 +18,10 @@ const LIGHT_TEXT = "black";
 const DARK_TEXT = "white";
 const LIGHT_PLACEHOLDER = "#A0A0A0";
 const DARK_PLACEHOLDER = "#8E8E93";
-const LIGHT_GRAY_TEXT = "#4A4A4A"; // text-gray-700
-const DARK_GRAY_TEXT = "#D1D5DB"; // text-gray-300
+const LIGHT_GRAY_TEXT = "#4A4A4A"; 
+const DARK_GRAY_TEXT = "#D1D5DB";
 
-// ✅ Validação com Zod
+
 const registerSchema = z.object({
   email: z.string().email("E-mail inválido"),
   password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres"),
@@ -45,10 +44,9 @@ export default function RegisterScreen() {
     resolver: zodResolver(registerSchema),
   });
 
-  // 🔹 Função para obter a cor dinâmica (Dark Mode)
   const getDynamicColor = (light: string, dark: string) => (isDark ? dark : light);
 
-  // ✅ Função de registro
+
   const handleRegister = async (data: RegisterFormData) => {
     try {
       setLoading(true);
@@ -93,7 +91,6 @@ export default function RegisterScreen() {
               </View>
             </View>
 
-            {/* Formulário */}
             <View style={styles.formContainer}>
               {/* EMAIL */}
               <Controller
@@ -145,7 +142,6 @@ export default function RegisterScreen() {
                 )}
               />
               
-              {/* Botão Mostrar/Ocultar Senha (Adicionado para consistência de UI, embora não estivesse no Controller) */}
                <TouchableOpacity
                 onPress={() => setShowPassword(!showPassword)}
                 style={styles.showPasswordButton}
@@ -159,10 +155,10 @@ export default function RegisterScreen() {
               {/* Botão */}
               <View style={styles.buttonWrapper}>
                 <TouchableOpacity
-                  style={[styles.button, { opacity: loading ? 0.8 : 1 }]} // active:opacity-90 simulado com opacidade no loading
+                  style={[styles.button, { opacity: loading ? 0.8 : 1 }]} 
                   onPress={()=> handleSubmit(handleRegister)()}
                   disabled={loading}
-                  activeOpacity={0.9} // Simula o active:opacity-90
+                  activeOpacity={0.9} 
                 >
                   {loading ? (
                     <ActivityIndicator color="#fff" />
@@ -190,51 +186,46 @@ export default function RegisterScreen() {
   );
 }
 
-// 🎨 StyleSheet com Estilos Nativos
+
 const styles = StyleSheet.create({
-  // SafeAreaView (flex-1 bg-white dark:bg-black)
   safeArea: {
     flex: 1,
   },
-  // ScrollView (flex-1 p-4)
   scrollViewContent: {
     flexGrow: 1,
-    padding: 16, // p-4
+    padding: 16, 
   },
 
-  // Header Container (w-full max-w-md mx-auto mt-8)
   headerContainer: {
     width: "100%",
-    maxWidth: 448, // max-w-md
-    alignSelf: "center", // mx-auto
-    marginTop: 32, // mt-8
+    maxWidth: 448,
+    alignSelf: "center", 
+    marginTop: 32,
   },
   
-  // Header Content (items-center mb-8)
   headerContent: {
-    marginBottom: 32, // mb-8
+    marginBottom: 32,
   },
 
-  // Logo (items-center mb-8)
   logoWrapper: {
     alignItems: "center",
-    marginBottom: 32, // mb-8
+    marginBottom: 32, 
   },
-  // Logo Text (text-4xl font-bold text-[#2ECC71])
+ 
   logoText: {
-    fontSize: 36, // text-4xl
-    fontWeight: "700", // font-bold
+    fontSize: 36,
+    fontWeight: "700",
     color: ACCENT_COLOR,
   },
 
-  // Progress Bar
+
   progressBarWrapper: {
-    marginBottom: 32, // mb-8
+    marginBottom: 32, 
   },
   progressBarTextWrapper: {
-    alignItems: "center", // items-center
-    justifyContent: "center", // justify-center
-    marginBottom: 8, // mb-2
+    alignItems: "center", 
+    justifyContent: "center", 
+    marginBottom: 8, 
   },
   progressBarText: {
     fontSize: 14, // text-sm
